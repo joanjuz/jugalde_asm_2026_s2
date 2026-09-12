@@ -11,6 +11,10 @@ F_END = 8_000        # Frecuencia final [Hz]
 # Parámetros físicos
 SOUND_SPEED = 343.0  # Velocidad aproximada del sonido [m/s]
 
+# Parámetros del ruido
+NOISE_STD = 0.15      # Desviación estándar del ruido
+RANDOM_SEED = 12345   # Semilla para reproducibilidad
+
 # Ecos simulados:
 # (distancia al objeto [m], amplitud relativa del eco)
 ECHOES = [
@@ -63,9 +67,7 @@ def generate_echo(signal, fs, distance, sound_speed, amplitude):
 
 
 def main():
-    # ---------------------------------------------------------
-    # 1. Generar señal transmitida
-    # ---------------------------------------------------------
+    # Generar señal transmitida
     t, signal = generate_chirp(
         FS,
         DURATION,
@@ -73,9 +75,7 @@ def main():
         F_END
     )
 
-    # ---------------------------------------------------------
-    # 2. Generar todos los ecos
-    # ---------------------------------------------------------
+    # Generar todos los ecos
     echoes = []
 
     for distance, amplitude in ECHOES:
@@ -97,10 +97,7 @@ def main():
             )
         )
 
-    # ---------------------------------------------------------
-    # 3. Crear señal recibida
-    # ---------------------------------------------------------
-
+    # Crear señal recibida
     # La longitud debe alcanzar para contener el eco más lejano
     received_length = max(
         len(echo)
@@ -117,9 +114,19 @@ def main():
     for echo, _, _, _, _ in echoes:
         received[:len(echo)] += echo
 
-    # ---------------------------------------------------------
-    # 4. Mostrar información
-    # ---------------------------------------------------------
+    # Generar ruido gaussiano
+    rng = np.random.default_rng(RANDOM_SEED)
+
+    noise = rng.normal(
+        loc=0.0,
+        scale=NOISE_STD,
+        size=len(received)
+    )
+
+    # Agregar ruido a la señal recibida
+    received_noisy = received + noise
+
+    # Mostrar información
     print(f"Frecuencia de muestreo: {FS} Hz")
     print(f"Duración del chirp: {DURATION * 1000:.1f} ms")
     print(f"Número de muestras del chirp: {len(signal)}")
@@ -144,9 +151,9 @@ def main():
             f"retardo = {delay_samples} muestras"
         )
 
-    # ---------------------------------------------------------
-    # 5. Gráfica de la señal transmitida
-    # ---------------------------------------------------------
+    print(f"\nDesviación estándar del ruido: {NOISE_STD}")
+
+    # Gráfica de la señal transmitida
     plt.plot(t * 1000, signal)
 
     plt.title("Chirp lineal transmitido")
@@ -156,9 +163,7 @@ def main():
 
     plt.show()
 
-    # ---------------------------------------------------------
-    # 6. Gráfica de los ecos por separado
-    # ---------------------------------------------------------
+    # Gráfica de los ecos por separado
     for i, (
         echo,
         distance,
@@ -183,9 +188,7 @@ def main():
 
     plt.show()
 
-    # ---------------------------------------------------------
-    # 7. Gráfica de la señal total recibida
-    # ---------------------------------------------------------
+    # Gráfica de la señal total recibida
     received_time = np.arange(len(received)) / FS
 
     plt.plot(
@@ -194,6 +197,32 @@ def main():
     )
 
     plt.title("Señal recibida con múltiples ecos")
+    plt.xlabel("Tiempo [ms]")
+    plt.ylabel("Amplitud")
+    plt.grid()
+
+    plt.show()
+
+    # Gráfica del ruido gaussiano
+    plt.plot(
+        received_time * 1000,
+        noise
+    )
+
+    plt.title("Ruido gaussiano simulado")
+    plt.xlabel("Tiempo [ms]")
+    plt.ylabel("Amplitud")
+    plt.grid()
+
+    plt.show()
+
+    # Gráfica de la señal recibida con ruido
+    plt.plot(
+        received_time * 1000,
+        received_noisy
+    )
+
+    plt.title("Señal recibida con ecos y ruido")
     plt.xlabel("Tiempo [ms]")
     plt.ylabel("Amplitud")
     plt.grid()
