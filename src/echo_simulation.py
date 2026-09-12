@@ -12,6 +12,8 @@ from config import (
     MIN_PEAK_SEPARATION
 )
 
+from fft_correlation import fft_correlation
+
 from signal_simulation import (
     generate_chirp,
     generate_echoes,
@@ -70,6 +72,11 @@ def main():
         signal,
         received_noisy
     )
+    # Calcular correlación mediante FFT
+    correlation_fft = fft_correlation(
+        signal,
+        received_noisy
+    )
 
     # Buscar máximo de correlación
     maximum_delay = find_maximum_delay(
@@ -78,6 +85,20 @@ def main():
     # Detectar picos correspondientes a ecos
     detected_peaks = find_echo_peaks(
         correlation_direct,
+        FS,
+        SOUND_SPEED,
+        MIN_DETECTION_DISTANCE,
+        PEAK_THRESHOLD_RATIO,
+        MIN_PEAK_SEPARATION
+    )
+    # Buscar máximo de correlación mediante FFT
+    maximum_delay_fft = find_maximum_delay(
+        correlation_fft
+    )
+
+    # Detectar picos correspondientes a ecos mediante FFT
+    detected_peaks_fft = find_echo_peaks(
+        correlation_fft,
         FS,
         SOUND_SPEED,
         MIN_DETECTION_DISTANCE,
@@ -173,6 +194,33 @@ def main():
             f"retardo = {delay} muestras, "
             f"distancia = {distance:.3f} m"
     )
+        # Mostrar resultado de correlación mediante FFT
+    print(
+        f"\nMáximo de correlación mediante FFT: "
+        f"{maximum_delay_fft} muestras"
+    )
+
+    # Mostrar ecos detectados mediante FFT
+    print("\nEcos detectados mediante correlación FFT:")
+
+    for i, delay in enumerate(
+        detected_peaks_fft,
+        start=1
+    ):
+        # Convertir retardo a tiempo
+        delay_time = delay / FS
+
+        # Convertir tiempo de vuelo a distancia
+        distance = (
+            SOUND_SPEED * delay_time
+            / 2
+        )
+
+        print(
+            f"Eco {i}: "
+            f"retardo = {delay} muestras, "
+            f"distancia = {distance:.3f} m"
+        )
 
 
 if __name__ == "__main__":
