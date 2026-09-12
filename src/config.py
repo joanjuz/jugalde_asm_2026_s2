@@ -22,3 +22,15 @@ ECHOES = [
 MIN_DETECTION_DISTANCE = 0.20  # Distancia mínima detectable [m]
 PEAK_THRESHOLD_RATIO = 0.30    # Umbral relativo para detección de picos
 MIN_PEAK_SEPARATION = 50       # Separación mínima entre picos [muestras]
+
+# Parámetros para comparación de rendimiento
+PERFORMANCE_SIZES = [
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096
+]
+
+PERFORMANCE_REPETITIONS = 5

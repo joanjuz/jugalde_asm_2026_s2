@@ -9,10 +9,16 @@ from config import (
     ECHOES,
     MIN_DETECTION_DISTANCE,
     PEAK_THRESHOLD_RATIO,
-    MIN_PEAK_SEPARATION
+    MIN_PEAK_SEPARATION,
+    PERFORMANCE_SIZES,
+    PERFORMANCE_REPETITIONS
 )
 
 from fft_correlation import fft_correlation
+
+from correlation_comparison import compare_correlations
+
+from performance_comparison import compare_execution_times
 
 from signal_simulation import (
     generate_chirp,
@@ -33,7 +39,9 @@ from plots import (
     plot_received_signal,
     plot_noise,
     plot_noisy_signal,
-    plot_direct_correlation
+    plot_direct_correlation,
+    plot_performance_comparison,
+    plot_correlation_comparison
 )
 
 
@@ -72,17 +80,19 @@ def main():
         signal,
         received_noisy
     )
+
     # Calcular correlación mediante FFT
     correlation_fft = fft_correlation(
         signal,
         received_noisy
     )
 
-    # Buscar máximo de correlación
+    # Buscar máximo de correlación directa
     maximum_delay = find_maximum_delay(
         correlation_direct
     )
-    # Detectar picos correspondientes a ecos
+
+    # Detectar picos correspondientes a ecos mediante correlación directa
     detected_peaks = find_echo_peaks(
         correlation_direct,
         FS,
@@ -91,6 +101,7 @@ def main():
         PEAK_THRESHOLD_RATIO,
         MIN_PEAK_SEPARATION
     )
+
     # Buscar máximo de correlación mediante FFT
     maximum_delay_fft = find_maximum_delay(
         correlation_fft
@@ -104,6 +115,18 @@ def main():
         MIN_DETECTION_DISTANCE,
         PEAK_THRESHOLD_RATIO,
         MIN_PEAK_SEPARATION
+    )
+
+    # Comparar resultados de ambos métodos
+    maximum_difference, average_difference = compare_correlations(
+        correlation_direct,
+        correlation_fft
+    )
+    # Comparar tiempos de ejecución
+    performance_results = compare_execution_times(
+        PERFORMANCE_SIZES,
+        PERFORMANCE_REPETITIONS,
+        RANDOM_SEED
     )
 
     # Mostrar información de la señal
@@ -138,11 +161,105 @@ def main():
         f"{NOISE_STD}"
     )
 
-    # Mostrar resultado de correlación
+    # Mostrar resultado de correlación directa
     print(
         f"\nMáximo de correlación directa: "
         f"{maximum_delay} muestras"
     )
+
+    # Mostrar ecos detectados mediante correlación directa
+    print("\nEcos detectados mediante correlación directa:")
+
+    for i, delay in enumerate(
+        detected_peaks,
+        start=1
+    ):
+        # Convertir retardo a tiempo
+        delay_time = delay / FS
+
+        # Convertir tiempo de vuelo a distancia
+        distance = (
+            SOUND_SPEED * delay_time
+            / 2
+        )
+
+        print(
+            f"Eco {i}: "
+            f"retardo = {delay} muestras, "
+            f"distancia = {distance:.3f} m"
+        )
+
+    # Mostrar resultado de correlación mediante FFT
+    print(
+        f"\nMáximo de correlación mediante FFT: "
+        f"{maximum_delay_fft} muestras"
+    )
+
+    # Mostrar ecos detectados mediante FFT
+    print("\nEcos detectados mediante correlación FFT:")
+
+    for i, delay in enumerate(
+        detected_peaks_fft,
+        start=1
+    ):
+        # Convertir retardo a tiempo
+        delay_time = delay / FS
+
+        # Convertir tiempo de vuelo a distancia
+        distance = (
+            SOUND_SPEED * delay_time
+            / 2
+        )
+
+        print(
+            f"Eco {i}: "
+            f"retardo = {delay} muestras, "
+            f"distancia = {distance:.3f} m"
+        )
+
+    # Mostrar comparación numérica
+    print("\nComparación de correlaciones:")
+
+    print(
+        f"Diferencia máxima: "
+        f"{maximum_difference:.12e}"
+    )
+
+    print(
+        f"Diferencia promedio: "
+        f"{average_difference:.12e}"
+    )
+    # Mostrar comparación de tiempos
+    print("\nComparación de tiempos de ejecución:")
+
+    print(
+        f"{'N':>8} "
+        f"{'Directa [ms]':>15} "
+        f"{'FFT [ms]':>15} "
+        f"{'Mejora':>12}"
+    )
+
+    for (
+        size,
+        direct_time,
+        fft_time
+    ) in performance_results:
+
+        # Convertir segundos a milisegundos
+        direct_ms = direct_time * 1000
+        fft_ms = fft_time * 1000
+
+        # Calcular factor de mejora
+        speedup = (
+            direct_time / fft_time
+        )
+
+        print(
+            f"{size:>8} "
+            f"{direct_ms:>15.6f} "
+            f"{fft_ms:>15.6f} "
+            f"{speedup:>11.2f}x"
+        )
 
     # Mostrar gráficas
     plot_transmitted_signal(
@@ -173,54 +290,15 @@ def main():
     plot_direct_correlation(
         correlation_direct
     )
-    # Mostrar ecos detectados
-    print("\nEcos detectados mediante correlación directa:")
-
-    for i, delay in enumerate(
-        detected_peaks,
-        start=1
-    ):
-        # Convertir retardo a tiempo
-        delay_time = delay / FS
-
-        # Convertir tiempo de vuelo a distancia
-        distance = (
-            SOUND_SPEED * delay_time
-            / 2
-        )
-
-        print(
-            f"Eco {i}: "
-            f"retardo = {delay} muestras, "
-            f"distancia = {distance:.3f} m"
+    # Gráfica de comparación de rendimiento
+    plot_performance_comparison(
+        performance_results
     )
-        # Mostrar resultado de correlación mediante FFT
-    print(
-        f"\nMáximo de correlación mediante FFT: "
-        f"{maximum_delay_fft} muestras"
+    # Gráfica de comparación de las correlaciones
+    plot_correlation_comparison(
+        correlation_direct,
+        correlation_fft
     )
-
-    # Mostrar ecos detectados mediante FFT
-    print("\nEcos detectados mediante correlación FFT:")
-
-    for i, delay in enumerate(
-        detected_peaks_fft,
-        start=1
-    ):
-        # Convertir retardo a tiempo
-        delay_time = delay / FS
-
-        # Convertir tiempo de vuelo a distancia
-        distance = (
-            SOUND_SPEED * delay_time
-            / 2
-        )
-
-        print(
-            f"Eco {i}: "
-            f"retardo = {delay} muestras, "
-            f"distancia = {distance:.3f} m"
-        )
 
 
 if __name__ == "__main__":

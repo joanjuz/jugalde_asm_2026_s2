@@ -108,6 +108,7 @@ def plot_noisy_signal(received_noisy, fs):
     plt.show()
 
 
+
 def plot_direct_correlation(correlation):
     """Muestra la correlación directa."""
 
@@ -126,5 +127,79 @@ def plot_direct_correlation(correlation):
     plt.xlabel("Retardo [muestras]")
     plt.ylabel("Correlación")
     plt.grid()
+
+    plt.show()
+    
+    
+def plot_performance_comparison(results):
+    """Muestra la comparación de tiempos entre correlación directa y FFT."""
+
+    # Extraer tamaños y tiempos
+    sizes = [
+        size
+        for size, _, _ in results
+    ]
+
+    direct_times = [
+        direct_time * 1000
+        for _, direct_time, _ in results
+    ]
+
+    fft_times = [
+        fft_time * 1000
+        for _, _, fft_time in results
+    ]
+
+    # Gráfica de tiempos
+    plt.plot(
+        sizes,
+        direct_times,
+        marker="o",
+        label="Correlación directa"
+    )
+
+    plt.plot(
+        sizes,
+        fft_times,
+        marker="o",
+        label="Correlación FFT"
+    )
+
+    plt.title("Comparación de tiempos de ejecución")
+    plt.xlabel("Tamaño de la señal N")
+    plt.ylabel("Tiempo promedio [ms]")
+    plt.grid()
+    plt.legend()
+
+    plt.show()
+    
+def plot_correlation_comparison(correlation_direct, correlation_fft):
+    """Compara gráficamente la correlación directa y mediante FFT."""
+
+    # Vector de retardos
+    delays = np.arange(
+        len(correlation_direct)
+    )
+
+    # Correlación directa
+    plt.plot(
+        delays,
+        correlation_direct,
+        label="Directa"
+    )
+
+    # Correlación mediante FFT
+    plt.plot(
+        delays,
+        correlation_fft,
+        linestyle="--",
+        label="FFT"
+    )
+
+    plt.title("Comparación de métodos de correlación")
+    plt.xlabel("Retardo [muestras]")
+    plt.ylabel("Correlación")
+    plt.grid()
+    plt.legend()
 
     plt.show()
