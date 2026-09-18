@@ -24,13 +24,32 @@ namespace RadarMath
     }
 
 
+    inline float samplesToTimeSeconds(
+        size_t samples
+    )
+    {
+        return
+            static_cast<float>(samples) /
+            Config::SAMPLE_RATE;
+    }
+
+
+    inline float samplesToTimeMilliseconds(
+        size_t samples
+    )
+    {
+        return
+            samplesToTimeSeconds(samples) *
+            1000.0f;
+    }
+
+
     inline float samplesToDistance(
         size_t samples
     )
     {
         const float travelTime =
-            static_cast<float>(samples) /
-            Config::SAMPLE_RATE;
+            samplesToTimeSeconds(samples);
 
         return
             (

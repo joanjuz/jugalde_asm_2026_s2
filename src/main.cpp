@@ -1,9 +1,10 @@
 #include <Arduino.h>
-
+#include "fft_correlation.h"
 #include "chirp.h"
 #include "echo_simulation.h"
 #include "direct_correlation.h"
 #include "i2s_output.h"
+#include "adc_input.h"
 
 
 void setup()
@@ -22,6 +23,13 @@ void setup()
     Serial.println(
         "========================="
     );
+    if (ADCInput::begin())
+{
+    if (ADCInput::capture())
+    {
+        ADCInput::showInformation();
+    }
+}
 
 
     // ==================================================
@@ -79,6 +87,102 @@ void setup()
     DirectCorrelation::detectEchoes();
 
     DirectCorrelation::showDetectedEchoes();
+    // ==================================================
+    // 5. Correlación mediante FFT
+    // ==================================================
+
+    FFTCorrelation::calculate(
+        Chirp::data(),
+        EchoSimulation::data()
+    );
+
+    FFTCorrelation::detectEchoes();
+
+    FFTCorrelation::showDetectedEchoes();
+
+
+    // ==================================================
+    // 6. Comparación
+    // ==================================================
+
+    Serial.println();
+    Serial.println(
+        "=== COMPARACION DE CORRELACION ==="
+    );
+
+
+    const unsigned long directTime =
+        DirectCorrelation::elapsedMicros();
+
+    const unsigned long fftTime =
+        FFTCorrelation::elapsedMicros();
+
+
+    Serial.printf(
+        "Directa: %.3f ms\n",
+        directTime / 1000.0f
+    );
+
+    Serial.printf(
+        "FFT: %.3f ms\n",
+        fftTime / 1000.0f
+    );
+
+
+    if (fftTime > 0)
+    {
+        Serial.printf(
+            "Relacion Directa/FFT: %.2fx\n",
+            static_cast<float>(
+                directTime
+            )
+            /
+            static_cast<float>(
+                fftTime
+            )
+        );
+    }
+
+
+    // Comprobar que ambos métodos detectaron
+    // los mismos retardos.
+    bool sameDetections =
+        DirectCorrelation::detectionCount()
+        ==
+        FFTCorrelation::detectionCount();
+
+
+    if (sameDetections)
+    {
+        const auto* direct =
+            DirectCorrelation::detections();
+
+        const auto* fft =
+            FFTCorrelation::detections();
+
+
+        for (size_t i = 0;
+            i <
+            DirectCorrelation::detectionCount();
+            i++)
+        {
+            if (direct[i].lag !=
+                fft[i].lag)
+            {
+                sameDetections = false;
+
+                break;
+            }
+        }
+    }
+
+
+    Serial.printf(
+        "Retardos coinciden: %s\n",
+        sameDetections
+            ? "SI"
+            : "NO"
+    );
 
 
     // ==================================================

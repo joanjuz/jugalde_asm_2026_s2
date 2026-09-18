@@ -37,6 +37,11 @@ namespace Config
     constexpr float NOISE_STD = 0.15f;
 
     constexpr uint32_t RANDOM_SEED = 12345;
+    // ==================================================
+    // ADC / micrófono
+    // ==================================================
+
+    constexpr int ADC_MIC_PIN = 1;
 
 
     // ==================================================
@@ -76,6 +81,27 @@ namespace Config
 
     constexpr size_t CORRELATION_SIZE =
         MAX_LAG + 1;
+
+    // ==================================================
+    // FFT
+    // ==================================================
+
+    // Para correlación lineal se necesita al menos:
+    //
+    // NUM_SAMPLES + RECEIVED_SAMPLES - 1
+    //
+    // 960 + 1660 - 1 = 2619
+    //
+    // La siguiente potencia de 2 es 4096.
+    constexpr size_t FFT_SIZE = 4096;
+
+    static_assert(
+        FFT_SIZE >=
+            NUM_SAMPLES +
+            RECEIVED_SAMPLES -
+            1,
+        "FFT_SIZE es demasiado pequeno"
+    );
 
 
     // ==================================================

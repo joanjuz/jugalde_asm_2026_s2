@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-namespace DirectCorrelation
+namespace FFTCorrelation
 {
     struct Detection
     {

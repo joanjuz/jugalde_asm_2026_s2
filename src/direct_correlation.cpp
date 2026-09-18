@@ -16,6 +16,7 @@ namespace DirectCorrelation
 
 
     static size_t detectedCount = 0;
+    static unsigned long lastElapsed = 0;
 
 
     // ==================================================
@@ -38,15 +39,15 @@ namespace DirectCorrelation
 
 
         for (size_t lag = 0;
-             lag <= Config::MAX_LAG;
-             lag++)
+            lag <= Config::MAX_LAG;
+            lag++)
         {
             float sum = 0.0f;
 
 
             for (size_t n = 0;
-                 n < Config::NUM_SAMPLES;
-                 n++)
+                n < Config::NUM_SAMPLES;
+                n++)
             {
                 sum +=
                     static_cast<float>(
@@ -64,7 +65,7 @@ namespace DirectCorrelation
         }
 
 
-        const unsigned long elapsed =
+        lastElapsed =
             micros() -
             startTime;
 
@@ -84,13 +85,13 @@ namespace DirectCorrelation
 
         Serial.printf(
             "Tiempo de calculo: %lu us\n",
-            elapsed
+            lastElapsed
         );
 
 
         Serial.printf(
             "Tiempo de calculo: %.3f ms\n",
-            elapsed /
+            lastElapsed /
             1000.0f
         );
     }
@@ -320,6 +321,12 @@ namespace DirectCorrelation
                     detected[i].lag
                 )
             );
+            Serial.printf(
+                "Tiempo de vuelo: %.3f ms\n",
+                RadarMath::samplesToTimeMilliseconds(
+                    detected[i].lag
+                )
+            );
 
 
             Serial.printf(
@@ -342,5 +349,9 @@ namespace DirectCorrelation
     const Detection* detections()
     {
         return detected;
+    }
+    unsigned long elapsedMicros()
+    {
+        return lastElapsed;
     }
 }
