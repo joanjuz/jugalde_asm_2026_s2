@@ -22,6 +22,39 @@ constexpr size_t NUM_SAMPLES =
 
 constexpr float SOUND_SPEED = 343.0f;
 
+// ======================================================
+// Parámetros de ruido
+// ======================================================
+
+// Desviación estándar relativa al nivel de la señal
+constexpr float NOISE_STD = 0.15f;
+
+// Misma amplitud usada para generar el chirp
+constexpr float SIGNAL_AMPLITUDE = 30000.0f;
+
+// Semilla fija para obtener siempre la misma prueba
+constexpr uint32_t RANDOM_SEED = 12345;
+
+// Estado del generador pseudoaleatorio
+uint32_t randomState = RANDOM_SEED;
+
+// Variables usadas por Box-Muller
+bool hasSpareGaussian = false;
+float spareGaussian = 0.0f;
+
+
+// ======================================================
+// Parámetros de detección
+// ======================================================
+
+constexpr float MIN_DETECTION_DISTANCE = 0.20f;
+
+constexpr float PEAK_THRESHOLD_RATIO = 0.30f;
+
+constexpr size_t MIN_PEAK_SEPARATION = 50;
+
+constexpr size_t MAX_DETECTIONS = 10;
+
 
 // ======================================================
 // Ecos simulados
@@ -44,12 +77,28 @@ constexpr size_t NUM_ECHOES =
     sizeof(ECHOES) / sizeof(ECHOES[0]);
 
 
-// Máximo retardo que vamos a permitir en esta simulación
+// ======================================================
+// Tamaños de buffers
+// ======================================================
+
 constexpr size_t MAX_DELAY = 700;
 
-// Tamaño total de la señal recibida
 constexpr size_t RECEIVED_SAMPLES =
     NUM_SAMPLES + MAX_DELAY;
+
+// Retardos posibles:
+//
+// received = 1660
+// chirp    = 960
+//
+// 1660 - 960 = 700
+//
+// Se prueban retardos 0...700
+constexpr size_t MAX_LAG =
+    RECEIVED_SAMPLES - NUM_SAMPLES;
+
+constexpr size_t CORRELATION_SIZE =
+    MAX_LAG + 1;
 
 
 // ======================================================
@@ -60,21 +109,41 @@ constexpr int I2S_BCLK = 4;
 constexpr int I2S_LRCLK = 5;
 constexpr int I2S_DATA = 6;
 
-constexpr i2s_port_t I2S_PORT = I2S_NUM_0;
+constexpr i2s_port_t I2S_PORT =
+    I2S_NUM_0;
 
 
 // ======================================================
 // Buffers
 // ======================================================
 
-// Chirp mono de 16 bits
+// Chirp original mono
 int16_t chirp[NUM_SAMPLES];
 
-// Buffer estéreo para transmitir por I2S
+// Buffer estéreo para I2S
 int16_t stereoBuffer[NUM_SAMPLES * 2];
 
 // Señal recibida simulada
 float receivedSignal[RECEIVED_SAMPLES];
+
+// Resultado de correlación
+float correlation[CORRELATION_SIZE];
+
+
+// ======================================================
+// Estructura para ecos detectados
+// ======================================================
+
+struct Detection
+{
+    size_t lag;
+    float correlationValue;
+    float distance;
+};
+
+Detection detections[MAX_DETECTIONS];
+
+size_t detectionCount = 0;
 
 
 // ======================================================
@@ -83,14 +152,14 @@ float receivedSignal[RECEIVED_SAMPLES];
 
 void generateChirp()
 {
-    // Pendiente de frecuencia del chirp
     const float k =
         (F_END - F_START) / DURATION;
 
     for (size_t n = 0; n < NUM_SAMPLES; n++)
     {
         const float t =
-            static_cast<float>(n) / SAMPLE_RATE;
+            static_cast<float>(n) /
+            SAMPLE_RATE;
 
         const float phase =
             2.0f * PI *
@@ -99,10 +168,9 @@ void generateChirp()
                 + 0.5f * k * t * t
             );
 
-        // Convertir la señal de -1...1 a PCM de 16 bits
         chirp[n] =
             static_cast<int16_t>(
-                sinf(phase) * 30000.0f
+                sinf(phase) * SIGNAL_AMPLITUDE
             );
     }
 }
@@ -115,7 +183,9 @@ void generateChirp()
 void showChirpInformation()
 {
     Serial.println();
-    Serial.println("=== CHIRP GENERADO ===");
+    Serial.println(
+        "=== CHIRP GENERADO ==="
+    );
 
     Serial.printf(
         "Frecuencia de muestreo: %lu Hz\n",
@@ -139,25 +209,28 @@ void showChirpInformation()
 
     Serial.printf(
         "Numero de muestras: %u\n",
-        static_cast<unsigned>(NUM_SAMPLES)
+        static_cast<unsigned>(
+            NUM_SAMPLES
+        )
     );
 
     Serial.printf(
         "Memoria usada por chirp: %u bytes\n",
-        static_cast<unsigned>(sizeof(chirp))
+        static_cast<unsigned>(
+            sizeof(chirp)
+        )
     );
 }
 
 
 // ======================================================
-// Convertir chirp mono a estéreo
+// Crear buffer estéreo
 // ======================================================
 
 void createStereoBuffer()
 {
     for (size_t i = 0; i < NUM_SAMPLES; i++)
     {
-        // Misma muestra para ambos canales
         stereoBuffer[i * 2] =
             chirp[i];
 
@@ -168,36 +241,187 @@ void createStereoBuffer()
 
 
 // ======================================================
-// Convertir distancia a retardo en muestras
+// Conversión distancia -> muestras
 // ======================================================
 
 size_t distanceToSamples(float distance)
 {
-    // El sonido va hasta el objeto y regresa
     const float travelTime =
-        (2.0f * distance) / SOUND_SPEED;
+        (2.0f * distance) /
+        SOUND_SPEED;
 
     return static_cast<size_t>(
-        roundf(travelTime * SAMPLE_RATE)
+        roundf(
+            travelTime *
+            SAMPLE_RATE
+        )
     );
 }
 
 
 // ======================================================
+// Conversión muestras -> distancia
+// ======================================================
+
+float samplesToDistance(size_t samples)
+{
+    const float travelTime =
+        static_cast<float>(samples) /
+        SAMPLE_RATE;
+
+    return
+        (
+            travelTime *
+            SOUND_SPEED
+        )
+        / 2.0f;
+}
+
+// ======================================================
+// Generador pseudoaleatorio reproducible
+// ======================================================
+
+uint32_t nextRandom()
+{
+    // Generador congruencial lineal
+    randomState =
+        1664525UL * randomState
+        + 1013904223UL;
+
+    return randomState;
+}
+
+
+// ======================================================
+// Número uniforme entre 0 y 1
+// ======================================================
+
+float randomUniform()
+{
+    return
+        (
+            static_cast<float>(
+                nextRandom()
+            )
+            + 1.0f
+        )
+        /
+        4294967297.0f;
+}
+
+
+// ======================================================
+// Ruido gaussiano mediante Box-Muller
+// ======================================================
+
+float gaussianRandom()
+{
+    // Box-Muller produce dos valores gaussianos
+    // por cada par de números uniformes.
+    // Guardamos uno para usarlo después.
+
+    if (hasSpareGaussian)
+    {
+        hasSpareGaussian = false;
+
+        return spareGaussian;
+    }
+
+
+    const float u1 =
+        randomUniform();
+
+    const float u2 =
+        randomUniform();
+
+
+    const float magnitude =
+        sqrtf(
+            -2.0f *
+            logf(u1)
+        );
+
+    const float angle =
+        2.0f *
+        PI *
+        u2;
+
+
+    const float value1 =
+        magnitude *
+        cosf(angle);
+
+    const float value2 =
+        magnitude *
+        sinf(angle);
+
+
+    spareGaussian =
+        value2;
+
+    hasSpareGaussian =
+        true;
+
+
+    return value1;
+}
+
+
+// ======================================================
+// Reiniciar generador de ruido
+// ======================================================
+
+void resetNoiseGenerator()
+{
+    randomState =
+        RANDOM_SEED;
+
+    hasSpareGaussian =
+        false;
+
+    spareGaussian =
+        0.0f;
+}
+
+// ======================================================
 // Simular ecos
+// ======================================================
+
+// ======================================================
+// Simular señal recibida con ecos y ruido
 // ======================================================
 
 void simulateEchoes()
 {
-    // Limpiar el buffer recibido
+    // Reiniciar la semilla para que la prueba
+    // sea reproducible.
+    resetNoiseGenerator();
+
+
+    // --------------------------------------------------
+    // 1. Generar ruido gaussiano
+    // --------------------------------------------------
+
+    const float noiseAmplitude =
+        NOISE_STD *
+        SIGNAL_AMPLITUDE;
+
+
     for (size_t i = 0;
          i < RECEIVED_SAMPLES;
          i++)
     {
-        receivedSignal[i] = 0.0f;
+        receivedSignal[i] =
+            gaussianRandom()
+            *
+            noiseAmplitude;
     }
 
-    // Agregar cada eco
+
+    // --------------------------------------------------
+    // 2. Agregar los ecos encima del ruido
+    // --------------------------------------------------
+
     for (size_t echoIndex = 0;
          echoIndex < NUM_ECHOES;
          echoIndex++)
@@ -207,7 +431,7 @@ void simulateEchoes()
                 ECHOES[echoIndex].distance
             );
 
-        // Copiar el chirp desplazado
+
         for (size_t n = 0;
              n < NUM_SAMPLES;
              n++)
@@ -215,11 +439,18 @@ void simulateEchoes()
             const size_t destination =
                 n + delay;
 
-            if (destination < RECEIVED_SAMPLES)
+
+            if (destination <
+                RECEIVED_SAMPLES)
             {
                 receivedSignal[destination] +=
-                    static_cast<float>(chirp[n]) *
-                    ECHOES[echoIndex].amplitude;
+                    static_cast<float>(
+                        chirp[n]
+                    )
+                    *
+                    ECHOES[
+                        echoIndex
+                    ].amplitude;
             }
         }
     }
@@ -227,13 +458,32 @@ void simulateEchoes()
 
 
 // ======================================================
-// Mostrar información de los ecos simulados
+// Mostrar ecos que fueron simulados
 // ======================================================
 
 void showEchoInformation()
 {
     Serial.println();
-    Serial.println("=== ECOS SIMULADOS ===");
+    Serial.println(
+        "=== ECOS SIMULADOS ==="
+    );
+    Serial.printf(
+    "Ruido gaussiano: sigma = %.2f\n",
+    NOISE_STD
+);
+
+    Serial.printf(
+        "Desviacion PCM: %.0f\n",
+        NOISE_STD *
+        SIGNAL_AMPLITUDE
+    );
+
+    Serial.printf(
+        "Semilla: %lu\n",
+        RANDOM_SEED
+    );
+
+    Serial.println();
 
     for (size_t i = 0;
          i < NUM_ECHOES;
@@ -247,25 +497,43 @@ void showEchoInformation()
             SOUND_SPEED;
 
         const size_t delay =
-            distanceToSamples(distance);
+            distanceToSamples(
+                distance
+            );
 
         Serial.printf(
-            "Eco %u: %.2f m | %.3f ms | %u muestras | amplitud %.2f\n",
-            static_cast<unsigned>(i + 1),
+            "Eco %u: %.2f m | "
+            "%.3f ms | "
+            "%u muestras | "
+            "amplitud %.2f\n",
+
+            static_cast<unsigned>(
+                i + 1
+            ),
+
             distance,
-            travelTime * 1000.0f,
-            static_cast<unsigned>(delay),
+
+            travelTime *
+            1000.0f,
+
+            static_cast<unsigned>(
+                delay
+            ),
+
             ECHOES[i].amplitude
         );
     }
 
     Serial.printf(
         "Buffer recibido: %u muestras\n",
-        static_cast<unsigned>(RECEIVED_SAMPLES)
+        static_cast<unsigned>(
+            RECEIVED_SAMPLES
+        )
     );
 
     Serial.printf(
-        "Memoria de señal recibida: %u bytes\n",
+        "Memoria de señal recibida: "
+        "%u bytes\n",
         static_cast<unsigned>(
             sizeof(receivedSignal)
         )
@@ -274,7 +542,309 @@ void showEchoInformation()
 
 
 // ======================================================
-// Configuración de I2S
+// Correlación directa
+// ======================================================
+
+void calculateDirectCorrelation()
+{
+    Serial.println();
+    Serial.println(
+        "=== CORRELACION DIRECTA ==="
+    );
+
+    const unsigned long startTime =
+        micros();
+
+
+    // Probar cada posible retardo
+    for (size_t lag = 0;
+         lag <= MAX_LAG;
+         lag++)
+    {
+        float sum = 0.0f;
+
+        // Producto punto entre:
+        //
+        // chirp[n]
+        //
+        // y
+        //
+        // receivedSignal[n + lag]
+        //
+        for (size_t n = 0;
+             n < NUM_SAMPLES;
+             n++)
+        {
+            sum +=
+                static_cast<float>(
+                    chirp[n]
+                )
+                *
+                receivedSignal[
+                    n + lag
+                ];
+        }
+
+        correlation[lag] = sum;
+    }
+
+
+    const unsigned long endTime =
+        micros();
+
+    const unsigned long elapsed =
+        endTime - startTime;
+
+
+    Serial.println(
+        "Correlacion calculada."
+    );
+
+    Serial.printf(
+        "Retardos evaluados: %u\n",
+        static_cast<unsigned>(
+            CORRELATION_SIZE
+        )
+    );
+
+    Serial.printf(
+        "Tiempo de calculo: %lu us\n",
+        elapsed
+    );
+
+    Serial.printf(
+        "Tiempo de calculo: %.3f ms\n",
+        elapsed / 1000.0f
+    );
+}
+
+
+// ======================================================
+// Encontrar máximo de correlación
+// ======================================================
+
+float findMaximumCorrelation()
+{
+    float maximum = 0.0f;
+
+    const size_t minimumLag =
+        distanceToSamples(
+            MIN_DETECTION_DISTANCE
+        );
+
+    for (size_t lag = minimumLag;
+         lag <= MAX_LAG;
+         lag++)
+    {
+        if (correlation[lag] >
+            maximum)
+        {
+            maximum =
+                correlation[lag];
+        }
+    }
+
+    return maximum;
+}
+
+
+// ======================================================
+// Detectar picos de correlación
+// ======================================================
+
+void detectEchoes()
+{
+    detectionCount = 0;
+
+    const size_t minimumLag =
+        distanceToSamples(
+            MIN_DETECTION_DISTANCE
+        );
+
+    const float maximumCorrelation =
+        findMaximumCorrelation();
+
+    const float threshold =
+        maximumCorrelation *
+        PEAK_THRESHOLD_RATIO;
+
+
+    Serial.println();
+    Serial.println(
+        "=== DETECCION DE PICOS ==="
+    );
+
+    Serial.printf(
+        "Retardo minimo: %u muestras\n",
+        static_cast<unsigned>(
+            minimumLag
+        )
+    );
+
+    Serial.printf(
+        "Umbral relativo: %.2f\n",
+        PEAK_THRESHOLD_RATIO
+    );
+
+
+    // Buscar máximos locales
+    for (size_t lag = minimumLag + 1;
+         lag < MAX_LAG;
+         lag++)
+    {
+        const float current =
+            correlation[lag];
+
+        const bool aboveThreshold =
+            current >= threshold;
+
+        const bool localMaximum =
+            current >
+                correlation[lag - 1]
+            &&
+            current >=
+                correlation[lag + 1];
+
+
+        if (!aboveThreshold ||
+            !localMaximum)
+        {
+            continue;
+        }
+
+
+        // Si este es el primer pico,
+        // lo guardamos directamente.
+        if (detectionCount == 0)
+        {
+            detections[0].lag =
+                lag;
+
+            detections[0].correlationValue =
+                current;
+
+            detections[0].distance =
+                samplesToDistance(lag);
+
+            detectionCount = 1;
+
+            continue;
+        }
+
+
+        Detection &lastDetection =
+            detections[
+                detectionCount - 1
+            ];
+
+
+        const size_t separation =
+            lag -
+            lastDetection.lag;
+
+
+        // Si está muy cerca de otro pico,
+        // conservar solo el más fuerte.
+        if (separation <
+            MIN_PEAK_SEPARATION)
+        {
+            if (current >
+                lastDetection.correlationValue)
+            {
+                lastDetection.lag =
+                    lag;
+
+                lastDetection.correlationValue =
+                    current;
+
+                lastDetection.distance =
+                    samplesToDistance(
+                        lag
+                    );
+            }
+
+            continue;
+        }
+
+
+        // Guardar nuevo pico
+        if (detectionCount <
+            MAX_DETECTIONS)
+        {
+            detections[
+                detectionCount
+            ].lag =
+                lag;
+
+            detections[
+                detectionCount
+            ].correlationValue =
+                current;
+
+            detections[
+                detectionCount
+            ].distance =
+                samplesToDistance(
+                    lag
+                );
+
+            detectionCount++;
+        }
+    }
+}
+
+
+// ======================================================
+// Mostrar ecos detectados
+// ======================================================
+
+void showDetectedEchoes()
+{
+    Serial.println();
+    Serial.println(
+        "=== ECOS DETECTADOS ==="
+    );
+
+    if (detectionCount == 0)
+    {
+        Serial.println(
+            "No se detectaron ecos."
+        );
+
+        return;
+    }
+
+
+    for (size_t i = 0;
+         i < detectionCount;
+         i++)
+    {
+        Serial.printf(
+            "Eco %u\n",
+            static_cast<unsigned>(
+                i + 1
+            )
+        );
+
+        Serial.printf(
+            "Retardo: %u muestras\n",
+            static_cast<unsigned>(
+                detections[i].lag
+            )
+        );
+
+        Serial.printf(
+            "Distancia: %.3f m\n",
+            detections[i].distance
+        );
+
+        Serial.println();
+    }
+}
+
+
+// ======================================================
+// Configuración I2S
 // ======================================================
 
 void configureI2S()
@@ -306,11 +876,12 @@ void configureI2S()
     i2sConfig.dma_buf_len = 128;
 
     i2sConfig.use_apll = false;
-    i2sConfig.tx_desc_auto_clear = true;
+    i2sConfig.tx_desc_auto_clear =
+        true;
+
     i2sConfig.fixed_mclk = 0;
 
 
-    // Instalar driver I2S
     esp_err_t result =
         i2s_driver_install(
             I2S_PORT,
@@ -318,6 +889,7 @@ void configureI2S()
             0,
             nullptr
         );
+
 
     if (result != ESP_OK)
     {
@@ -330,7 +902,6 @@ void configureI2S()
     }
 
 
-    // Configurar pines I2S
     i2s_pin_config_t pinConfig = {};
 
     pinConfig.bck_io_num =
@@ -352,6 +923,7 @@ void configureI2S()
             &pinConfig
         );
 
+
     if (result != ESP_OK)
     {
         Serial.printf(
@@ -362,6 +934,7 @@ void configureI2S()
         return;
     }
 
+
     Serial.println();
     Serial.println(
         "I2S configurado correctamente."
@@ -370,7 +943,7 @@ void configureI2S()
 
 
 // ======================================================
-// Transmitir chirp por I2S
+// Transmitir chirp
 // ======================================================
 
 void transmitChirp()
@@ -380,6 +953,7 @@ void transmitChirp()
     const size_t bytesToWrite =
         sizeof(stereoBuffer);
 
+
     const esp_err_t result =
         i2s_write(
             I2S_PORT,
@@ -388,6 +962,7 @@ void transmitChirp()
             &bytesWritten,
             portMAX_DELAY
         );
+
 
     if (result == ESP_OK)
     {
@@ -447,13 +1022,19 @@ void setup()
     );
 
 
+    // --------------------------------------------------
     // 1. Generar chirp
+    // --------------------------------------------------
+
     generateChirp();
 
     showChirpInformation();
 
 
-    // 2. Crear buffer para I2S
+    // --------------------------------------------------
+    // 2. Crear buffer para transmisión I2S
+    // --------------------------------------------------
+
     createStereoBuffer();
 
     Serial.printf(
@@ -464,17 +1045,42 @@ void setup()
     );
 
 
-    // 3. Simular señal recibida con ecos
+    // --------------------------------------------------
+    // 3. Simular recepción de ecos
+    // --------------------------------------------------
+
     simulateEchoes();
 
     showEchoInformation();
 
 
-    // 4. Configurar salida I2S
+    // --------------------------------------------------
+    // 4. Correlacionar señal recibida con el chirp
+    // --------------------------------------------------
+
+    calculateDirectCorrelation();
+
+
+    // --------------------------------------------------
+    // 5. Detectar los picos
+    // --------------------------------------------------
+
+    detectEchoes();
+
+    showDetectedEchoes();
+
+
+    // --------------------------------------------------
+    // 6. Preparar salida física I2S
+    // --------------------------------------------------
+
     configureI2S();
 
 
-    // 5. Transmitir chirp
+    // --------------------------------------------------
+    // 7. Transmitir chirp
+    // --------------------------------------------------
+
     transmitChirp();
 }
 
