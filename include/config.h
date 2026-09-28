@@ -10,18 +10,40 @@ namespace Config
 
     constexpr uint32_t SAMPLE_RATE = 48000;
 
-    constexpr float DURATION = 0.020f;
+    constexpr float DURATION = 0.002f;
 
     constexpr float F_START = 3000.0f;
     constexpr float F_END = 8000.0f;
 
-    constexpr float SIGNAL_AMPLITUDE = 30000.0f;
+    constexpr float SIGNAL_AMPLITUDE = 18000.0f;
 
     constexpr size_t NUM_SAMPLES =
         static_cast<size_t>(
             SAMPLE_RATE * DURATION
         );
+    // ==================================================
+    // Calibración de fondo
+    // ==================================================
 
+    constexpr size_t BACKGROUND_CALIBRATION_FRAMES =
+        10;
+
+
+    // Rango en el que buscaremos el objeto real.
+    // Por ahora trabajaremos aproximadamente de
+    // 30 cm a 130 cm.
+    constexpr float TARGET_MIN_DISTANCE =
+        0.48f;
+
+    constexpr float TARGET_MAX_DISTANCE =
+        0.80f;
+
+
+    // Cambio mínimo respecto al fondo.
+    // 0.04 = 4 % de la correlación normalizada.
+    // Después lo ajustaremos con pruebas reales.
+    constexpr float BACKGROUND_CHANGE_THRESHOLD =
+        0.04f;
 
     // ==================================================
     // Parámetros físicos
@@ -109,13 +131,13 @@ namespace Config
     // ==================================================
 
     constexpr float MIN_DETECTION_DISTANCE =
-        0.20f;
+        0.0f;
 
     constexpr float PEAK_THRESHOLD_RATIO =
-        0.30f;
+        0.20f;
 
     constexpr size_t MIN_PEAK_SEPARATION =
-        50;
+        20;
 
     constexpr size_t MAX_DETECTIONS =
         10;

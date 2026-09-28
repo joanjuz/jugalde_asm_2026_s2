@@ -48,6 +48,9 @@ namespace FFTCorrelation
 
     static size_t detectedCount = 0;
 
+    static float lastMaximumCorrelation =
+    0.0f;
+
     static unsigned long lastElapsed = 0;
 
 
@@ -491,6 +494,9 @@ namespace FFTCorrelation
         const float maximumCorrelation =
             findMaximumCorrelation();
 
+        lastMaximumCorrelation =
+            maximumCorrelation;
+
 
         const float threshold =
             maximumCorrelation *
@@ -633,10 +639,15 @@ namespace FFTCorrelation
     void showDetectedEchoes()
     {
         Serial.println();
+
         Serial.println(
             "=== ECOS DETECTADOS POR FFT ==="
         );
 
+
+        // ==================================================
+        // Validar que existan detecciones
+        // ==================================================
 
         if (detectedCount == 0)
         {
@@ -648,12 +659,93 @@ namespace FFTCorrelation
         }
 
 
+        // ==================================================
+        // Referencia temporal
+        //
+        // El primer pico detectado se usa como referencia
+        // para eliminar el desplazamiento temporal entre
+        // el inicio del ADC y la emisión real del chirp.
+        // ==================================================
+
+        const size_t referenceLag =
+            detected[0].lag;
+
+
+        Serial.printf(
+            "Referencia temporal: %u muestras\n",
+            static_cast<unsigned>(
+                referenceLag
+            )
+        );
+
+
+        Serial.println();
+
+
+        // ==================================================
+        // Mostrar todos los picos detectados
+        // ==================================================
+
         for (size_t i = 0;
-             i < detectedCount;
-             i++)
+            i < detectedCount;
+            i++)
         {
+            // ----------------------------------------------
+            // Retardo relativo respecto al primer pico
+            // ----------------------------------------------
+
+            const size_t relativeLag =
+                detected[i].lag -
+                referenceLag;
+
+
+            // ----------------------------------------------
+            // Tiempo relativo
+            // ----------------------------------------------
+
+            const float relativeTime =
+                RadarMath::samplesToTimeMilliseconds(
+                    relativeLag
+                );
+
+
+            // ----------------------------------------------
+            // Distancia relativa
+            // ----------------------------------------------
+
+            const float relativeDistance =
+                RadarMath::samplesToDistance(
+                    relativeLag
+                );
+
+
+            // ----------------------------------------------
+            // Fuerza relativa de correlación
+            // ----------------------------------------------
+
+            float relativeStrength =
+                0.0f;
+
+
+            if (lastMaximumCorrelation > 0.0f)
+            {
+                relativeStrength =
+                    (
+                        detected[i].correlationValue
+                        /
+                        lastMaximumCorrelation
+                    )
+                    *
+                    100.0f;
+            }
+
+
+            // ----------------------------------------------
+            // Mostrar información del pico
+            // ----------------------------------------------
+
             Serial.printf(
-                "Eco %u\n",
+                "Pico %u\n",
                 static_cast<unsigned>(
                     i + 1
                 )
@@ -661,22 +753,36 @@ namespace FFTCorrelation
 
 
             Serial.printf(
-                "Retardo: %u muestras\n",
+                "Retardo absoluto: %u muestras\n",
                 static_cast<unsigned>(
                     detected[i].lag
                 )
             );
+
+
             Serial.printf(
-                "Tiempo de vuelo: %.3f ms\n",
-                RadarMath::samplesToTimeMilliseconds(
-                    detected[i].lag
+                "Retardo relativo: %u muestras\n",
+                static_cast<unsigned>(
+                    relativeLag
                 )
             );
 
 
             Serial.printf(
-                "Distancia: %.3f m\n",
-                detected[i].distance
+                "Tiempo relativo: %.3f ms\n",
+                relativeTime
+            );
+
+
+            Serial.printf(
+                "Distancia relativa: %.3f m\n",
+                relativeDistance
+            );
+
+
+            Serial.printf(
+                "Fuerza de correlacion: %.1f %%\n",
+                relativeStrength
             );
 
 
@@ -700,5 +806,15 @@ namespace FFTCorrelation
     const Detection* detections()
     {
         return detected;
+    }
+    const float* correlationData()
+    {
+        return correlation;
+    }
+
+
+    float maximumCorrelation()
+    {
+        return lastMaximumCorrelation;
     }
 }

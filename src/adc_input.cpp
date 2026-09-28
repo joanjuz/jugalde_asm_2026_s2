@@ -9,6 +9,7 @@
 
 #include "config.h"
 
+
 namespace ADCInput
 {
     // ==================================================
@@ -18,31 +19,46 @@ namespace ADCInput
     constexpr adc1_channel_t ADC_CHANNEL =
         ADC1_CHANNEL_0;
 
+
     constexpr adc_atten_t ADC_ATTENUATION =
-        ADC_ATTEN_DB_11;
+        ADC_ATTEN_DB_12;
+
 
     // ESP32-S3 entrega 4 bytes por conversión
     // en el formato TYPE2.
     constexpr size_t ADC_BYTES_PER_SAMPLE =
         sizeof(adc_digi_output_data_t);
 
+
     // Tamaño de cada bloque generado por DMA.
     //
     // Debe ser múltiplo del tamaño de una
     // conversión.
-    constexpr size_t DMA_FRAME_BYTES = 256;
+    constexpr size_t DMA_FRAME_BYTES =
+        256;
+
 
     // Buffer interno del driver.
     //
-    // 8192 bytes son suficientes para almacenar
-    // más de las 1660 muestras que necesitamos.
-    constexpr size_t DMA_STORE_BYTES = 8192;
+    // 8192 bytes permiten almacenar más de
+    // las 1660 muestras necesarias.
+    constexpr size_t DMA_STORE_BYTES =
+        8192;
 
-    // Buffer temporal usado para extraer datos
-    // desde el DMA.
-    constexpr size_t DMA_READ_BYTES = 512;
 
-    constexpr uint8_t ADC_DMA_UNIT = 0;
+    // Buffer temporal usado para leer desde DMA.
+    constexpr size_t DMA_READ_BYTES =
+        512;
+
+
+    // En adc_digi_pattern_config_t:
+    //
+    // 0 = ADC1
+    // 1 = ADC2
+    //
+    // En ESP32-S3 usamos ADC1 para DMA.
+    constexpr uint8_t ADC_DMA_UNIT =
+        0;
 
 
     // ==================================================
@@ -53,25 +69,61 @@ namespace ADCInput
         Config::RECEIVED_SAMPLES
     ];
 
+
     alignas(4)
     static uint8_t dmaReadBuffer[
         DMA_READ_BYTES
     ];
 
 
-    static bool initialized = false;
+    static bool initialized =
+        false;
 
-    static bool captureSuccessful = false;
 
-    static uint64_t captureTimeUs = 0;
+    static bool captureSuccessful =
+        false;
 
-    static size_t samplesCaptured = 0;
 
-    static float dcOffset = 0.0f;
+    static bool captureRunning =
+        false;
 
-    static uint16_t rawMinimum = 0;
 
-    static uint16_t rawMaximum = 0;
+    static uint64_t captureTimeUs =
+        0;
+
+
+    static uint64_t captureStartTimeUs =
+        0;
+
+
+    static size_t samplesCaptured =
+        0;
+
+
+    static float dcOffset =
+        0.0f;
+
+
+    static uint16_t rawMinimum =
+        0;
+
+
+    static uint16_t rawMaximum =
+        0;
+        // Límites usados solamente para diagnosticar
+    // saturación del ADC de 12 bits.
+    constexpr uint16_t RAW_LOW_LIMIT =
+        50;
+
+    constexpr uint16_t RAW_HIGH_LIMIT =
+        4000;
+
+
+    static size_t lowSaturationCount =
+        0;
+
+    static size_t highSaturationCount =
+        0;
 
 
     // ==================================================
@@ -92,14 +144,18 @@ namespace ADCInput
 
         adc_digi_init_config_t initConfig = {};
 
+
         initConfig.max_store_buf_size =
             DMA_STORE_BYTES;
+
 
         initConfig.conv_num_each_intr =
             DMA_FRAME_BYTES;
 
+
         initConfig.adc1_chan_mask =
             1UL << ADC_CHANNEL;
+
 
         initConfig.adc2_chan_mask =
             0;
@@ -128,13 +184,18 @@ namespace ADCInput
 
         adc_digi_pattern_config_t pattern = {};
 
+
         pattern.atten =
             ADC_ATTENUATION;
+
 
         pattern.channel =
             ADC_CHANNEL;
 
-        pattern.unit = ADC_DMA_UNIT;
+
+        pattern.unit =
+            ADC_DMA_UNIT;
+
 
         pattern.bit_width =
             SOC_ADC_DIGI_MAX_BITWIDTH;
@@ -146,24 +207,33 @@ namespace ADCInput
 
         adc_digi_configuration_t config = {};
 
-        // No queremos detenernos después de solo
-        // 255 conversiones.
-        config.conv_limit_en = false;
 
-        config.conv_limit_num = 255;
+        // No limitar la conversión a 255 muestras.
+        config.conv_limit_en =
+            false;
 
-        config.pattern_num = 1;
+
+        config.conv_limit_num =
+            255;
+
+
+        config.pattern_num =
+            1;
+
 
         config.adc_pattern =
             &pattern;
 
+
         config.sample_freq_hz =
             Config::SAMPLE_RATE;
+
 
         config.conv_mode =
             ADC_CONV_SINGLE_UNIT_1;
 
-        // ESP32-S3 usa TYPE2 para DMA.
+
+        // ESP32-S3 utiliza TYPE2 en modo DMA.
         config.format =
             ADC_DIGI_OUTPUT_FORMAT_TYPE2;
 
@@ -181,33 +251,41 @@ namespace ADCInput
                 esp_err_to_name(result)
             );
 
+
             adc_digi_deinitialize();
+
 
             return false;
         }
 
 
-        initialized = true;
+        initialized =
+            true;
 
 
         Serial.println();
+
         Serial.println(
             "ADC continuo con DMA configurado."
         );
+
 
         Serial.printf(
             "GPIO ADC: %d\n",
             Config::ADC_MIC_PIN
         );
 
-        Serial.printf(
-            "Canal ADC: ADC1_CHANNEL_0\n"
+
+        Serial.println(
+            "Canal ADC: ADC1_CHANNEL_0"
         );
+
 
         Serial.printf(
             "Frecuencia configurada: %lu Hz\n",
             Config::SAMPLE_RATE
         );
+
 
         Serial.printf(
             "Resolucion DMA: %u bits\n",
@@ -222,18 +300,26 @@ namespace ADCInput
 
 
     // ==================================================
-    // Captura mediante DMA
+    // Iniciar captura
     // ==================================================
 
-    bool capture()
+    bool startCapture()
     {
-        captureSuccessful = false;
+        captureSuccessful =
+            false;
 
-        samplesCaptured = 0;
 
-        captureTimeUs = 0;
+        samplesCaptured =
+            0;
 
-        dcOffset = 0.0f;
+
+        captureTimeUs =
+            0;
+
+
+        dcOffset =
+            0.0f;
+        
 
 
         if (!initialized)
@@ -246,15 +332,34 @@ namespace ADCInput
         }
 
 
+        if (captureRunning)
+        {
+            Serial.println(
+                "Ya existe una captura ADC en curso."
+            );
+
+            return false;
+        }
+
+
+        rawMinimum =
+            0xFFFF;
+
+
+        rawMaximum =
+            0;
+        lowSaturationCount =
+            0;
+
+        highSaturationCount =
+            0;
+
+
         // ------------------------------------------------
-        // Iniciar conversión continua
+        // Iniciar ADC continuo
         // ------------------------------------------------
 
-        const uint64_t startTime =
-            esp_timer_get_time();
-
-
-        esp_err_t result =
+        const esp_err_t result =
             adc_digi_start();
 
 
@@ -269,14 +374,37 @@ namespace ADCInput
         }
 
 
-        rawMinimum = 0xFFFF;
+        captureStartTimeUs =
+            esp_timer_get_time();
 
-        rawMaximum = 0;
+
+        captureRunning =
+            true;
 
 
-        // ------------------------------------------------
-        // Leer hasta obtener todas las muestras
-        // ------------------------------------------------
+        return true;
+    }
+
+
+    // ==================================================
+    // Finalizar captura
+    // ==================================================
+
+    bool finishCapture()
+    {
+        if (!captureRunning)
+        {
+            Serial.println(
+                "No existe una captura ADC en curso."
+            );
+
+            return false;
+        }
+
+
+        // ==================================================
+        // Leer muestras acumuladas por DMA
+        // ==================================================
 
         while (
             samplesCaptured
@@ -284,13 +412,16 @@ namespace ADCInput
             Config::RECEIVED_SAMPLES
         )
         {
-            uint32_t bytesRead = 0;
+            uint32_t bytesRead =
+                0;
 
 
-            result =
+            const esp_err_t result =
                 adc_digi_read_bytes(
                     dmaReadBuffer,
-                    sizeof(dmaReadBuffer),
+                    sizeof(
+                        dmaReadBuffer
+                    ),
                     &bytesRead,
                     100
                 );
@@ -313,14 +444,20 @@ namespace ADCInput
                     esp_err_to_name(result)
                 );
 
+
                 adc_digi_stop();
+
+
+                captureRunning =
+                    false;
+
 
                 return false;
             }
 
 
             // --------------------------------------------
-            // Cada resultado ocupa 4 bytes en ESP32-S3
+            // Extraer conversiones ADC
             // --------------------------------------------
 
             for (
@@ -345,7 +482,9 @@ namespace ADCInput
                     reinterpret_cast<
                         const adc_digi_output_data_t*
                     >(
-                        dmaReadBuffer + offset
+                        dmaReadBuffer
+                        +
+                        offset
                     );
 
 
@@ -353,6 +492,16 @@ namespace ADCInput
                     static_cast<uint16_t>(
                         sample->type2.data
                     );
+                if (rawValue <= RAW_LOW_LIMIT)
+                {
+                    lowSaturationCount++;
+                }
+
+
+                if (rawValue >= RAW_HIGH_LIMIT)
+                {
+                    highSaturationCount++;
+                }
 
 
                 adcBuffer[
@@ -390,9 +539,9 @@ namespace ADCInput
         }
 
 
-        // ------------------------------------------------
+        // ==================================================
         // Detener ADC
-        // ------------------------------------------------
+        // ==================================================
 
         const esp_err_t stopResult =
             adc_digi_stop();
@@ -401,7 +550,11 @@ namespace ADCInput
         captureTimeUs =
             esp_timer_get_time()
             -
-            startTime;
+            captureStartTimeUs;
+
+
+        captureRunning =
+            false;
 
 
         if (stopResult != ESP_OK)
@@ -415,11 +568,22 @@ namespace ADCInput
         }
 
 
-        // ------------------------------------------------
-        // Calcular nivel DC
-        // ------------------------------------------------
+        if (samplesCaptured == 0)
+        {
+            Serial.println(
+                "No se capturaron muestras."
+            );
 
-        float sum = 0.0f;
+            return false;
+        }
+
+
+        // ==================================================
+        // Calcular componente DC
+        // ==================================================
+
+        float sum =
+            0.0f;
 
 
         for (
@@ -428,20 +592,22 @@ namespace ADCInput
             i++
         )
         {
-            sum += adcBuffer[i];
+            sum +=
+                adcBuffer[i];
         }
 
 
         dcOffset =
-            sum /
+            sum
+            /
             static_cast<float>(
                 samplesCaptured
             );
 
 
-        // ------------------------------------------------
-        // Eliminar nivel DC
-        // ------------------------------------------------
+        // ==================================================
+        // Eliminar componente DC
+        // ==================================================
 
         for (
             size_t i = 0;
@@ -454,10 +620,30 @@ namespace ADCInput
         }
 
 
-        captureSuccessful = true;
+        captureSuccessful =
+            true;
 
 
         return true;
+    }
+
+
+    // ==================================================
+    // Captura completa
+    //
+    // Se conserva para pruebas donde no sea necesario
+    // sincronizar la emisión del chirp.
+    // ==================================================
+
+    bool capture()
+    {
+        if (!startCapture())
+        {
+            return false;
+        }
+
+
+        return finishCapture();
     }
 
 
@@ -468,6 +654,7 @@ namespace ADCInput
     void showInformation()
     {
         Serial.println();
+
         Serial.println(
             "=== ADQUISICION ADC DMA ==="
         );
@@ -565,6 +752,54 @@ namespace ADCInput
             "Valor RAW maximo: %u\n",
             rawMaximum
         );
+        const size_t saturatedSamples =
+            lowSaturationCount
+            +
+            highSaturationCount;
+
+
+        const float saturationPercentage =
+            (
+                100.0f
+                *
+                static_cast<float>(
+                    saturatedSamples
+                )
+            )
+            /
+            static_cast<float>(
+                samplesCaptured
+            );
+
+
+        Serial.printf(
+            "Muestras RAW <= %u: %u\n",
+            RAW_LOW_LIMIT,
+            static_cast<unsigned>(
+                lowSaturationCount
+            )
+        );
+
+
+        Serial.printf(
+            "Muestras RAW >= %u: %u\n",
+            RAW_HIGH_LIMIT,
+            static_cast<unsigned>(
+                highSaturationCount
+            )
+        );
+
+
+        Serial.printf(
+            "Muestras cerca de saturacion: %u / %u (%.2f %%)\n",
+            static_cast<unsigned>(
+                saturatedSamples
+            ),
+            static_cast<unsigned>(
+                samplesCaptured
+            ),
+            saturationPercentage
+        );
     }
 
 
@@ -576,4 +811,5 @@ namespace ADCInput
     {
         return adcBuffer;
     }
-}
+
+} // namespace ADCInput

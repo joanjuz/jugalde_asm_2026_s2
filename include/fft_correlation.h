@@ -4,6 +4,9 @@
 
 namespace FFTCorrelation
 {
+    const float* correlationData();
+
+    float maximumCorrelation();
     struct Detection
     {
         size_t lag;

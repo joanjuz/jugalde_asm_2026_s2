@@ -1,10 +1,40 @@
 #include <Arduino.h>
-#include "fft_correlation.h"
-#include "chirp.h"
-#include "echo_simulation.h"
-#include "direct_correlation.h"
-#include "i2s_output.h"
+
 #include "adc_input.h"
+#include "chirp.h"
+#include "fft_correlation.h"
+#include "i2s_output.h"
+#include "background_calibration.h"
+
+
+static bool captureRadarFrame()
+{
+    if (!ADCInput::startCapture())
+    {
+        return false;
+    }
+
+
+    I2SOutput::transmit();
+
+
+    if (!ADCInput::finishCapture())
+    {
+        return false;
+    }
+
+
+    FFTCorrelation::calculate(
+        Chirp::data(),
+        ADCInput::data()
+    );
+
+
+    FFTCorrelation::detectEchoes();
+
+
+    return true;
+}
 
 
 void setup()
@@ -15,7 +45,6 @@ void setup()
 
 
     Serial.println();
-
     Serial.println(
         "ESP32-S3 - Radar acustico"
     );
@@ -23,13 +52,6 @@ void setup()
     Serial.println(
         "========================="
     );
-    if (ADCInput::begin())
-{
-    if (ADCInput::capture())
-    {
-        ADCInput::showInformation();
-    }
-}
 
 
     // ==================================================
@@ -42,7 +64,7 @@ void setup()
 
 
     // ==================================================
-    // 2. Preparar transmisión I2S
+    // 2. Crear buffer I2S
     // ==================================================
 
     I2SOutput::createStereoBuffer(
@@ -59,158 +81,121 @@ void setup()
 
 
     // ==================================================
-    // 3. Simular recepción
+    // 3. Configurar I2S
     // ==================================================
 
-    EchoSimulation::simulate(
-        Chirp::data()
-    );
+    if (!I2SOutput::configure())
+    {
+        Serial.println(
+            "No se pudo configurar I2S."
+        );
 
-
-    EchoSimulation::showInformation();
-
-
-    // ==================================================
-    // 4. Correlación directa
-    // ==================================================
-
-    DirectCorrelation::calculate(
-        Chirp::data(),
-        EchoSimulation::data()
-    );
+        return;
+    }
 
 
     // ==================================================
-    // 5. Detectar ecos
+    // 4. Configurar ADC DMA
     // ==================================================
 
-    DirectCorrelation::detectEchoes();
+    if (!ADCInput::begin())
+    {
+        Serial.println(
+            "No se pudo configurar ADC."
+        );
 
-    DirectCorrelation::showDetectedEchoes();
-    // ==================================================
-    // 5. Correlación mediante FFT
-    // ==================================================
+        return;
+    }
 
-    FFTCorrelation::calculate(
-        Chirp::data(),
-        EchoSimulation::data()
-    );
-
-    FFTCorrelation::detectEchoes();
-
-    FFTCorrelation::showDetectedEchoes();
-
-
-    // ==================================================
-    // 6. Comparación
-    // ==================================================
 
     Serial.println();
     Serial.println(
-        "=== COMPARACION DE CORRELACION ==="
+        "Radar fisico listo."
+    );
+    Serial.println();
+    Serial.println(
+        "================================"
+    );
+    Serial.println(
+        "RETIRE TABLA Y OBJETOS DEL FRENTE"
+    );
+    Serial.println(
+        "Calibracion comenzara en 5 segundos."
+    );
+    Serial.println(
+        "================================"
     );
 
 
-    const unsigned long directTime =
-        DirectCorrelation::elapsedMicros();
-
-    const unsigned long fftTime =
-        FFTCorrelation::elapsedMicros();
+    delay(5000);
 
 
-    Serial.printf(
-        "Directa: %.3f ms\n",
-        directTime / 1000.0f
-    );
-
-    Serial.printf(
-        "FFT: %.3f ms\n",
-        fftTime / 1000.0f
-    );
+    BackgroundCalibration::reset();
 
 
-    if (fftTime > 0)
+    size_t attempts =
+        0;
+
+
+    while (
+        BackgroundCalibration::capturedFrames()
+        <
+        BackgroundCalibration::requiredFrames()
+        &&
+        attempts < 30
+    )
     {
-        Serial.printf(
-            "Relacion Directa/FFT: %.2fx\n",
-            static_cast<float>(
-                directTime
-            )
-            /
-            static_cast<float>(
-                fftTime
-            )
-        );
-    }
+        attempts++;
 
 
-    // Comprobar que ambos métodos detectaron
-    // los mismos retardos.
-    bool sameDetections =
-        DirectCorrelation::detectionCount()
-        ==
-        FFTCorrelation::detectionCount();
-
-
-    if (sameDetections)
-    {
-        const auto* direct =
-            DirectCorrelation::detections();
-
-        const auto* fft =
-            FFTCorrelation::detections();
-
-
-        for (size_t i = 0;
-            i <
-            DirectCorrelation::detectionCount();
-            i++)
+        if (captureRadarFrame())
         {
-            if (direct[i].lag !=
-                fft[i].lag)
-            {
-                sameDetections = false;
-
-                break;
-            }
+            BackgroundCalibration::addCurrentFrame();
         }
+
+
+        delay(250);
     }
 
 
-    Serial.printf(
-        "Retardos coinciden: %s\n",
-        sameDetections
-            ? "SI"
-            : "NO"
+    BackgroundCalibration::finalize();
+
+
+    Serial.println();
+    Serial.println(
+        "Coloque ahora el objeto."
     );
 
 
-    // ==================================================
-    // 6. Configurar I2S
-    // ==================================================
-
-    I2SOutput::configure();
-
-
-    // ==================================================
-    // 7. Transmitir chirp
-    // ==================================================
-
-    I2SOutput::transmit();
-}
+    delay(3000);
+    }
 
 
 void loop()
 {
-    delay(5000);
-
-
     Serial.println();
+    Serial.println(
+        "================================"
+    );
 
     Serial.println(
-        "Transmitiendo chirp nuevamente..."
+        "=== NUEVA MEDICION FISICA ==="
+    );
+
+    Serial.println(
+        "================================"
     );
 
 
-    I2SOutput::transmit();
+    if (captureRadarFrame())
+    {
+        ADCInput::showInformation();
+
+        FFTCorrelation::showDetectedEchoes();
+
+        BackgroundCalibration::analyzeCurrentFrame();
+    }
+
+
+    delay(1000);
 }
