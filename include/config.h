@@ -26,7 +26,7 @@ namespace Config
     // ==================================================
 
     constexpr size_t BACKGROUND_CALIBRATION_FRAMES =
-        10;
+        30;
 
 
     // Rango en el que buscaremos el objeto real.
@@ -50,6 +50,26 @@ namespace Config
     // ==================================================
 
     constexpr float SOUND_SPEED = 343.0f;
+
+
+    // ==================================================
+    // Geometria fisica TX / RX
+    // ==================================================
+    //
+    // Separacion centro-a-centro fija entre:
+    //
+    // - parlante
+    // - microfono
+    //
+    // Medida fisica aproximada:
+    //
+    //     9.5 cm = 0.095 m
+    //
+    // Por ahora se usa SOLO para diagnostico.
+    // ==================================================
+
+    constexpr float TX_RX_BASELINE =
+        0.095f;
 
 
     // ==================================================
