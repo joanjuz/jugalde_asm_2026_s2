@@ -4,3 +4,10 @@ __pycache__/
 venv/
 .vscode/
 .idea/
+
+# PlatformIO
+.pio/
+
+# Archivos generados por herramientas
+.cache/
+compile_commands.json
