@@ -141,6 +141,19 @@ namespace BackgroundCalibration
         3;
 
     // ==================================================
+    // MODO DE SALIDA DEL RADAR
+    //
+    // false = salida limpia para demostracion
+    // true  = diagnosticos detallados
+    //
+    // Solo controla impresiones Serial.
+    // NO modifica detector, NMS ni tracker.
+    // ==================================================
+
+    constexpr bool DEBUG_RADAR =
+        Config::DEBUG_RADAR;
+
+    // ==================================================
     // GEOMETRIA BIESTATICA FUNCIONAL
     // ==================================================
     //
@@ -903,8 +916,8 @@ namespace BackgroundCalibration
 
     void analyzeCurrentFrame()
     {
-        Serial.println();
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println();
+        if (DEBUG_RADAR) Serial.println(
             "=== SUSTRACCION DE FONDO ==="
         );
 
@@ -922,11 +935,11 @@ namespace BackgroundCalibration
 
         if (detectionCount == 0)
         {
-            Serial.println();
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println();
+            if (DEBUG_RADAR) Serial.println(
                 "--- CANDIDATOS DE OBJETO ---"
             );
-            Serial.println();
+            if (DEBUG_RADAR) Serial.println();
 
             if (trackingActive)
             {
@@ -943,7 +956,7 @@ namespace BackgroundCalibration
                             0.5f
                         );
 
-                    Serial.printf(
+                    if (DEBUG_RADAR) Serial.printf(
                         "Seguimiento temporal: captura perdida %u / %u\n",
                         static_cast<unsigned>(
                             trackingMisses
@@ -961,6 +974,7 @@ namespace BackgroundCalibration
                             filteredLag
                         )
                     );
+                    Serial.println();
 
                     return;
                 }
@@ -978,6 +992,7 @@ namespace BackgroundCalibration
             Serial.println(
                 "Objetivo: NO DETECTADO"
             );
+            Serial.println();
 
             return;
         }
@@ -1044,8 +1059,8 @@ namespace BackgroundCalibration
                 2;
 
 
-        Serial.println();
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println();
+        if (DEBUG_RADAR) Serial.println(
             "--- DIAGNOSTICO DE SIGNO ---"
         );
 
@@ -1189,7 +1204,7 @@ namespace BackgroundCalibration
                 localBackgroundMax;
 
 
-            Serial.printf(
+            if (DEBUG_RADAR) Serial.printf(
                 "DIAG lag=%u, dist=%.3f m, "
                 "actual=%.1f %%, "
                 "promedio=%.1f %%, "
@@ -1216,7 +1231,7 @@ namespace BackgroundCalibration
         }
 
 
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println(
             "--- FIN DIAGNOSTICO DE SIGNO ---"
         );
 
@@ -1662,31 +1677,31 @@ namespace BackgroundCalibration
         }
 
 
-        Serial.println();
+        if (DEBUG_RADAR) Serial.println();
 
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println(
             "--- DIAGNOSTICO RESIDUAL ENERGETICO VERDADERO ---"
         );
 
 
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println(
             "Operacion: RMS(actual_normalizado - promedio_fondo)"
         );
 
 
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println(
             "Ventana RMS residual: +/-4 muestras"
         );
 
 
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println(
             "Ventana centroide residual: +/-12 muestras"
         );
 
 
         if (trueResidualPeakCount == 0)
         {
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println(
                 "Sin maximos RMS residuales."
             );
         }
@@ -1725,7 +1740,7 @@ namespace BackgroundCalibration
                     2.0f;
 
 
-                Serial.printf(
+                if (DEBUG_RADAR) Serial.printf(
                     "RESIDUAL-RMS %u: "
                     "lag=%u, "
                     "dist=%.3f m, "
@@ -1759,12 +1774,12 @@ namespace BackgroundCalibration
         }
 
 
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println(
             "--- FIN RESIDUAL ENERGETICO VERDADERO ---"
         );
 
 
-        Serial.println();
+        if (DEBUG_RADAR) Serial.println();
 
 
         // ==================================================
@@ -1800,12 +1815,12 @@ namespace BackgroundCalibration
         // - distancia final
         // ==================================================
 
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println(
             "--- DIAGNOSTICO GEOMETRIA BIESTATICA ---"
         );
 
 
-        Serial.printf(
+        if (DEBUG_RADAR) Serial.printf(
             "Separacion TX-RX: %.3f m\n",
             Config::TX_RX_BASELINE
         );
@@ -1813,7 +1828,7 @@ namespace BackgroundCalibration
 
         if (trueResidualPeakCount == 0)
         {
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println(
                 "Sin picos residuales para corregir."
             );
         }
@@ -1849,7 +1864,7 @@ namespace BackgroundCalibration
                     );
 
 
-                Serial.printf(
+                if (DEBUG_RADAR) Serial.printf(
                     "BIESTATICA %u: "
                     "lag=%u, "
                     "actual=%.3f m, "
@@ -1871,12 +1886,12 @@ namespace BackgroundCalibration
         }
 
 
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println(
             "--- FIN GEOMETRIA BIESTATICA ---"
         );
 
 
-        Serial.println();
+        if (DEBUG_RADAR) Serial.println();
 
 
         TrackingCandidate trackingCandidates[
@@ -2462,20 +2477,20 @@ namespace BackgroundCalibration
             }
 
 
-            Serial.println();
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println();
+            if (DEBUG_RADAR) Serial.println(
                 "--- DIAGNOSTICO ENVOLVENTE RMS ---"
             );
 
 
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println(
                 "Ventana RMS: +/-4 muestras"
             );
 
 
             if (rmsPeakCount == 0)
             {
-                Serial.println(
+                if (DEBUG_RADAR) Serial.println(
                     "Sin excesos RMS positivos."
                 );
             }
@@ -2493,7 +2508,7 @@ namespace BackgroundCalibration
                         ].lag;
 
 
-                    Serial.printf(
+                    if (DEBUG_RADAR) Serial.printf(
                         "RMS %u: "
                         "lag=%u, "
                         "distancia=%.3f m, "
@@ -2527,7 +2542,7 @@ namespace BackgroundCalibration
             }
 
 
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println(
                 "--- FIN DIAGNOSTICO RMS ---"
             );
 
@@ -2969,8 +2984,8 @@ namespace BackgroundCalibration
             }
 
 
-            Serial.println();
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println();
+            if (DEBUG_RADAR) Serial.println(
                 "--- DIAGNOSTICO BIDIRECCIONAL RANGO COMPLETO ---"
             );
 
@@ -2979,7 +2994,7 @@ namespace BackgroundCalibration
             // TOP positivo
             // ==========================================
 
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println(
                 "TOP CAMBIOS POSITIVOS:"
             );
 
@@ -2989,7 +3004,7 @@ namespace BackgroundCalibration
                 0
             )
             {
-                Serial.println(
+                if (DEBUG_RADAR) Serial.println(
                     "Sin excesos positivos."
                 );
             }
@@ -3002,7 +3017,7 @@ namespace BackgroundCalibration
                     i++
                 )
                 {
-                    Serial.printf(
+                    if (DEBUG_RADAR) Serial.printf(
                         "BIDIR +%u: "
                         "lag=%u, "
                         "distancia=%.3f m, "
@@ -3039,7 +3054,7 @@ namespace BackgroundCalibration
             // TOP negativo
             // ==========================================
 
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println(
                 "TOP CAMBIOS NEGATIVOS:"
             );
 
@@ -3049,7 +3064,7 @@ namespace BackgroundCalibration
                 0
             )
             {
-                Serial.println(
+                if (DEBUG_RADAR) Serial.println(
                     "Sin excesos negativos."
                 );
             }
@@ -3062,7 +3077,7 @@ namespace BackgroundCalibration
                     i++
                 )
                 {
-                    Serial.printf(
+                    if (DEBUG_RADAR) Serial.printf(
                         "BIDIR -%u: "
                         "lag=%u, "
                         "distancia=%.3f m, "
@@ -3095,7 +3110,7 @@ namespace BackgroundCalibration
             }
 
 
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println(
                 "--- FIN DIAGNOSTICO BIDIRECCIONAL ---"
             );
 
@@ -3316,15 +3331,15 @@ namespace BackgroundCalibration
             }
 
 
-            Serial.println();
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println();
+            if (DEBUG_RADAR) Serial.println(
                 "--- MAXIMOS RESIDUALES PRE-NMS ---"
             );
 
 
             if (preNmsPeakCount == 0)
             {
-                Serial.println(
+                if (DEBUG_RADAR) Serial.println(
                     "Sin maximos positivos."
                 );
             }
@@ -3336,7 +3351,7 @@ namespace BackgroundCalibration
                     i++
                 )
                 {
-                    Serial.printf(
+                    if (DEBUG_RADAR) Serial.printf(
                         "PRE-NMS %u: "
                         "lag=%u, "
                         "distancia=%.3f m, "
@@ -3369,7 +3384,7 @@ namespace BackgroundCalibration
             }
 
 
-            Serial.println(
+            if (DEBUG_RADAR) Serial.println(
                 "--- FIN MAXIMOS PRE-NMS ---"
             );
 
@@ -3578,8 +3593,8 @@ namespace BackgroundCalibration
             }
         }
 
-        Serial.println();
-        Serial.println(
+        if (DEBUG_RADAR) Serial.println();
+        if (DEBUG_RADAR) Serial.println(
             "--- CANDIDATOS DE OBJETO ---"
         );
 
@@ -3593,7 +3608,7 @@ namespace BackgroundCalibration
             const TrackingCandidate& candidate =
                 trackingCandidates[i];
 
-            Serial.printf(
+            if (DEBUG_RADAR) Serial.printf(
                 "Candidato %u: lag=%u, distancia=%.3f m, fuerza=%.1f %%, cambio=%.1f %%\n",
                 static_cast<unsigned>(
                     i + 1
@@ -3611,8 +3626,8 @@ namespace BackgroundCalibration
             );
         }
 
-        Serial.println();
-        Serial.printf(
+        if (DEBUG_RADAR) Serial.println();
+        if (DEBUG_RADAR) Serial.printf(
             "Referencia de alineacion: %u muestras\n",
             static_cast<unsigned>(
                 referenceLag
@@ -3888,7 +3903,7 @@ namespace BackgroundCalibration
                             0.5f
                         );
 
-                    Serial.printf(
+                    if (DEBUG_RADAR) Serial.printf(
                         "Seguimiento temporal: captura perdida %u / %u\n",
                         static_cast<unsigned>(
                             trackingMisses
@@ -3906,6 +3921,7 @@ namespace BackgroundCalibration
                             filteredLag
                         )
                     );
+                    Serial.println();
 
                     return;
                 }
@@ -3923,6 +3939,7 @@ namespace BackgroundCalibration
             Serial.println(
                 "Objetivo: NO DETECTADO"
             );
+            Serial.println();
 
             return;
         }
@@ -3973,26 +3990,26 @@ namespace BackgroundCalibration
                 0.5f
             );
 
-        Serial.printf(
+        if (DEBUG_RADAR) Serial.printf(
             "Cambio seleccionado: %.1f %%\n",
             selectedScore *
             100.0f
         );
 
-        Serial.printf(
+        if (DEBUG_RADAR) Serial.printf(
             "Fuerza seleccionada: %.1f %%\n",
             selectedStrength *
             100.0f
         );
 
-        Serial.printf(
+        if (DEBUG_RADAR) Serial.printf(
             "Retardo instantaneo: %u muestras\n",
             static_cast<unsigned>(
                 selectedPhysicalLag
             )
         );
 
-        Serial.printf(
+        if (DEBUG_RADAR) Serial.printf(
             "Retardo filtrado: %u muestras\n",
             static_cast<unsigned>(
                 filteredLag
@@ -4009,5 +4026,6 @@ namespace BackgroundCalibration
                 filteredLag
             )
         );
+        Serial.println();
     }
 }

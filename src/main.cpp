@@ -5,6 +5,7 @@
 #include "fft_correlation.h"
 #include "i2s_output.h"
 #include "background_calibration.h"
+#include "config.h"
 
 
 static bool captureRadarFrame()
@@ -173,25 +174,25 @@ void setup()
 
 void loop()
 {
-    Serial.println();
-    Serial.println(
+    if (Config::DEBUG_RADAR) Serial.println();
+    if (Config::DEBUG_RADAR) Serial.println(
         "================================"
     );
 
-    Serial.println(
+    if (Config::DEBUG_RADAR) Serial.println(
         "=== NUEVA MEDICION FISICA ==="
     );
 
-    Serial.println(
+    if (Config::DEBUG_RADAR) Serial.println(
         "================================"
     );
 
 
     if (captureRadarFrame())
     {
-        ADCInput::showInformation();
+        if (Config::DEBUG_RADAR) ADCInput::showInformation();
 
-        FFTCorrelation::showDetectedEchoes();
+        if (Config::DEBUG_RADAR) FFTCorrelation::showDetectedEchoes();
 
         BackgroundCalibration::analyzeCurrentFrame();
     }

@@ -8,6 +8,16 @@ namespace Config
     // Chirp
     // ==================================================
 
+    // ==================================================
+    // Salida de diagnostico del radar
+    //
+    // false = modo demostracion
+    // true  = diagnostico detallado
+    // ==================================================
+
+    constexpr bool DEBUG_RADAR =
+        false;
+
     constexpr uint32_t SAMPLE_RATE = 48000;
 
     constexpr float DURATION = 0.002f;

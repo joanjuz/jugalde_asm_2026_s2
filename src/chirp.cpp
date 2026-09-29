@@ -44,9 +44,30 @@ namespace Chirp
                 );
 
 
+                        // Ventana Hann para reducir lobulos secundarios
+            // en la autocorrelacion del chirp.
+            //
+            // w[n] = 0.5 * (1 - cos(2*pi*n/(N-1)))
+            const float window =
+                0.5f *
+                (
+                    1.0f -
+                    cosf(
+                        2.0f *
+                        PI *
+                        static_cast<float>(n)
+                        /
+                        static_cast<float>(
+                            Config::NUM_SAMPLES - 1
+                        )
+                    )
+                );
+
+
             chirp[n] =
                 static_cast<int16_t>(
                     sinf(phase) *
+                    window *
                     Config::SIGNAL_AMPLITUDE
                 );
         }

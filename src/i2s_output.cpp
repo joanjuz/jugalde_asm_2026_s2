@@ -88,9 +88,9 @@ namespace I2SOutput
             ESP_INTR_FLAG_LEVEL1;
 
 
-        i2sConfig.dma_buf_count = 8;
+        i2sConfig.dma_buf_count = 2;
 
-        i2sConfig.dma_buf_len = 128;
+        i2sConfig.dma_buf_len = 64;
 
         i2sConfig.use_apll = false;
 
@@ -209,13 +209,13 @@ namespace I2SOutput
 
         if (result == ESP_OK)
         {
-            Serial.println();
-            Serial.println(
+            if (Config::DEBUG_RADAR) Serial.println();
+            if (Config::DEBUG_RADAR) Serial.println(
                 "=== TRANSMISION I2S ==="
             );
 
 
-            Serial.printf(
+            if (Config::DEBUG_RADAR) Serial.printf(
                 "Bytes solicitados: %u\n",
                 static_cast<unsigned>(
                     bytesToWrite
@@ -223,7 +223,7 @@ namespace I2SOutput
             );
 
 
-            Serial.printf(
+            if (Config::DEBUG_RADAR) Serial.printf(
                 "Bytes enviados: %u\n",
                 static_cast<unsigned>(
                     bytesWritten
@@ -231,7 +231,7 @@ namespace I2SOutput
             );
 
 
-            Serial.printf(
+            if (Config::DEBUG_RADAR) Serial.printf(
                 "Muestras del chirp: %u\n",
                 static_cast<unsigned>(
                     Config::NUM_SAMPLES

@@ -267,8 +267,8 @@ namespace FFTCorrelation
         const float* receivedSignal
     )
     {
-        Serial.println();
-        Serial.println(
+        if (Config::DEBUG_RADAR) Serial.println();
+        if (Config::DEBUG_RADAR) Serial.println(
             "=== CORRELACION FFT ==="
         );
 
@@ -409,12 +409,12 @@ namespace FFTCorrelation
             startTime;
 
 
-        Serial.println(
+        if (Config::DEBUG_RADAR) Serial.println(
             "Correlacion FFT calculada."
         );
 
 
-        Serial.printf(
+        if (Config::DEBUG_RADAR) Serial.printf(
             "Tamano FFT: %u\n",
             static_cast<unsigned>(
                 Config::FFT_SIZE
@@ -422,7 +422,7 @@ namespace FFTCorrelation
         );
 
 
-        Serial.printf(
+        if (Config::DEBUG_RADAR) Serial.printf(
             "Retardos utiles: %u\n",
             static_cast<unsigned>(
                 Config::CORRELATION_SIZE
@@ -430,13 +430,13 @@ namespace FFTCorrelation
         );
 
 
-        Serial.printf(
+        if (Config::DEBUG_RADAR) Serial.printf(
             "Tiempo de calculo: %lu us\n",
             lastElapsed
         );
 
 
-        Serial.printf(
+        if (Config::DEBUG_RADAR) Serial.printf(
             "Tiempo de calculo: %.3f ms\n",
             lastElapsed /
             1000.0f
@@ -503,13 +503,13 @@ namespace FFTCorrelation
             Config::PEAK_THRESHOLD_RATIO;
 
 
-        Serial.println();
-        Serial.println(
+        if (Config::DEBUG_RADAR) Serial.println();
+        if (Config::DEBUG_RADAR) Serial.println(
             "=== DETECCION FFT ==="
         );
 
 
-        Serial.printf(
+        if (Config::DEBUG_RADAR) Serial.printf(
             "Retardo minimo: %u muestras\n",
             static_cast<unsigned>(
                 minimumLag
@@ -517,7 +517,7 @@ namespace FFTCorrelation
         );
 
 
-        Serial.printf(
+        if (Config::DEBUG_RADAR) Serial.printf(
             "Umbral relativo: %.2f\n",
             Config::PEAK_THRESHOLD_RATIO
         );
@@ -681,6 +681,255 @@ namespace FFTCorrelation
 
         Serial.println();
 
+
+        // ==================================================
+        // DIAGNOSTICO CENTROIDE DE PAQUETE
+        //
+        // Objetivo:
+        //
+        // Comparar la cresta positiva elegida por el
+        // detector con el centro energetico local del
+        // paquete completo de correlacion.
+        //
+        // Centroide:
+        //
+        //     sum(
+        //         lag * correlation[lag]^2
+        //     )
+        //     -----------------------------
+        //     sum(
+        //         correlation[lag]^2
+        //     )
+        //
+        // Ventana:
+        //
+        //     cresta - 12 ... cresta + 12
+        //
+        // ESTE BLOQUE ES SOLO DIAGNOSTICO.
+        //
+        // NO modifica:
+        // - detectEchoes()
+        // - detected[]
+        // - referenceLag
+        // - seleccion de picos
+        // - distancias actuales
+        // - calibracion de fondo
+        // - NMS
+        // - tracker
+        // ==================================================
+
+        constexpr int
+            PACKET_CENTROID_RADIUS =
+                12;
+
+
+        auto packetEnergyCentroid =
+            [&](
+                size_t centerLag
+            )
+            -> float
+        {
+            int firstLag =
+                static_cast<int>(
+                    centerLag
+                )
+                -
+                PACKET_CENTROID_RADIUS;
+
+
+            int lastLag =
+                static_cast<int>(
+                    centerLag
+                )
+                +
+                PACKET_CENTROID_RADIUS;
+
+
+            if (firstLag < 0)
+            {
+                firstLag = 0;
+            }
+
+
+            if (
+                lastLag >
+                static_cast<int>(
+                    Config::MAX_LAG
+                )
+            )
+            {
+                lastLag =
+                    static_cast<int>(
+                        Config::MAX_LAG
+                    );
+            }
+
+
+            float energySum =
+                0.0f;
+
+
+            float weightedLagSum =
+                0.0f;
+
+
+            for (
+                int lag = firstLag;
+                lag <= lastLag;
+                lag++
+            )
+            {
+                const float value =
+                    correlation[
+                        static_cast<size_t>(
+                            lag
+                        )
+                    ];
+
+
+                const float energy =
+                    value *
+                    value;
+
+
+                energySum +=
+                    energy;
+
+
+                weightedLagSum +=
+                    static_cast<float>(
+                        lag
+                    )
+                    *
+                    energy;
+            }
+
+
+            if (energySum <= 0.0f)
+            {
+                return static_cast<float>(
+                    centerLag
+                );
+            }
+
+
+            return
+                weightedLagSum
+                /
+                energySum;
+        };
+
+
+        const float referenceCentroid =
+            packetEnergyCentroid(
+                referenceLag
+            );
+
+
+        Serial.println(
+            "--- DIAGNOSTICO CENTROIDE DE PAQUETE ---"
+        );
+
+
+        Serial.println(
+            "Ventana centroide: +/-12 muestras"
+        );
+
+
+        Serial.printf(
+            "Referencia: "
+            "cresta=%u, "
+            "centroide=%.2f, "
+            "desplazamiento=%.2f muestras\n",
+            static_cast<unsigned>(
+                referenceLag
+            ),
+            referenceCentroid,
+            referenceCentroid
+                -
+                static_cast<float>(
+                    referenceLag
+                )
+        );
+
+
+        for (
+            size_t i = 0;
+            i < detectedCount;
+            i++
+        )
+        {
+            const size_t crestLag =
+                detected[i].lag;
+
+
+            const float centroidLag =
+                packetEnergyCentroid(
+                    crestLag
+                );
+
+
+            const size_t crestRelativeLag =
+                crestLag
+                -
+                referenceLag;
+
+
+            const float centroidRelativeLag =
+                centroidLag
+                -
+                referenceCentroid;
+
+
+            const float centroidDistance =
+                (
+                    centroidRelativeLag
+                    /
+                    static_cast<float>(
+                        Config::SAMPLE_RATE
+                    )
+                    *
+                    Config::SOUND_SPEED
+                )
+                /
+                2.0f;
+
+
+            Serial.printf(
+                "PAQUETE %u: "
+                "cresta_abs=%u, "
+                "centroide_abs=%.2f, "
+                "delta=%.2f, "
+                "cresta_rel=%u, "
+                "centroide_rel=%.2f, "
+                "dist_centroide=%.3f m\n",
+                static_cast<unsigned>(
+                    i + 1
+                ),
+                static_cast<unsigned>(
+                    crestLag
+                ),
+                centroidLag,
+                centroidLag
+                    -
+                    static_cast<float>(
+                        crestLag
+                    ),
+                static_cast<unsigned>(
+                    crestRelativeLag
+                ),
+                centroidRelativeLag,
+                centroidDistance
+            );
+        }
+
+
+        Serial.println(
+            "--- FIN DIAGNOSTICO CENTROIDE ---"
+        );
+
+
+        Serial.println();
 
         // ==================================================
         // Mostrar todos los picos detectados
